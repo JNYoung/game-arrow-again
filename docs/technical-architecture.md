@@ -1,396 +1,575 @@
-# game-arrow-again 技术架构文档
+# Arrow Again 箭了又箭 · 技术设计文档
 
-## 1. 结论
-
-`Arrow Again / 箭了又箭` 当前首版开发路线，建议明确采用：
-
-- **核心规则与关卡层：`TypeScript`**
-- **首版渲染与交互验证层：`Canvas`**
-- **移动端正式发布形态：Android / iOS 原生壳承载同一套共享玩法逻辑与数据协议**
-
-一句话结论：
-
-**这个项目不是“纯原生小游戏优先”，也不是“Unity 优先”，而是“`TypeScript + Canvas` 先把玩法和内容系统跑通，再逐步接入 Android / iOS 发布壳”的路线。**
+> 最后更新：2026-05-10  
+> 本文档面向所有参与开发的 AI 模型和开发者，完整描述项目的架构、数据结构、核心逻辑和渲染体系。
 
 ---
 
-## 2. 为什么当前适合 `TypeScript + Canvas`
+## 1. 项目概览
 
-## 2.1 这款游戏本质上是规则驱动，不是重 3D 表现驱动
+**Arrow Again（箭了又箭）** 是一款移动端休闲解谜游戏。
 
-`Arrow Again` 当前核心竞争力不在：
+**核心玩法一句话**：棋盘上摆放若干有方向的箭头棋子，玩家点击箭头 → 若该方向到棋盘边缘的路径无阻挡 → 箭头飞出并消除；目标是以正确顺序清除所有棋子。
 
-- 3D 演出
-- 复杂物理
-- 大量角色动画
-- 重资产管线
-
-它更依赖：
-
-- 棋盘状态
-- 路径阻挡判断
-- 点击消除反馈
-- 关卡生成与难度设计
-- 快速验证玩家是否能看懂与上瘾
-
-这类玩法最适合先把“规则核 + 数据结构 + 迭代速度”做好。
-
-而 `TypeScript` 在这件事上有明显优势：
-
-- 数据结构表达快
-- 原型迭代快
-- 关卡 JSON 与规则调试快
-- 可快速做可视化工具
-- 适合先把玩法和关卡方法论打透
+| 项目 | 内容 |
+|------|------|
+| 产品名称 | Arrow Again（箭了又箭） |
+| 类型 | 移动端休闲解谜 |
+| 目标平台 | iOS / Android（H5 备选） |
+| 单局时长 | 1–5 分钟 |
+| 当前阶段 | MVP 验证（Web Canvas 原型） |
 
 ---
 
-## 2.2 `Canvas` 足够支撑首版体验验证
-
-当前项目首版真正需要的表现力主要是：
-
-- 棋盘绘制
-- 箭头棋子绘制
-- 可点击高亮
-- 错误点击反馈
-- 飞出动画
-- 连锁解锁提示
-- 轻 UI（生命值、按钮、结果页）
-
-这些都属于 `Canvas` 的舒适区，不需要上 Unity。
-
-相比 DOM，`Canvas` 的优势在于：
-
-- 更接近真正游戏渲染方式
-- 动画和批量绘制更自然
-- 后续做粒子、缩放、轨迹、shake 更顺手
-- 更容易保持 Android / iOS / Web 一致视觉表达
-
-所以当前判断不是“TS + 普通网页交互就够了”，而是：
-
-**规则层用 TS，游戏表现层用 Canvas。**
-
----
-
-## 2.3 为什么现在不建议 Unity 作为首版主线
-
-不是不能用，而是当前不划算。
-
-当前如果上 Unity，会提前引入这些成本：
-
-- 引擎工程成本
-- 资源与打包链路成本
-- 团队工具链切换成本
-- 关卡数据和调试效率下降
-- 首轮玩法验证速度下降
-
-而当前最重要的问题不是“能不能做出酷炫效果”，而是：
-
-1. 玩家能否秒懂规则
-2. 关卡是否持续有解谜爽感
-3. 错误点击惩罚是否合适
-4. Hard 关是否能带来停留与广告机会
-5. 关卡数据体系是否可持续扩张
-
-这些都更适合先用轻量路线解决。
-
-所以当前建议：
-
-- **首版主线：`TypeScript + Canvas`**
-- **Unity：后续技术储备线，不进入当前 MVP 主路径**
-
----
-
-## 3. 推荐的总体技术路线
-
-## 3.1 三层结构
-
-### 第一层：共享规则核（TypeScript）
-
-职责：
-
-- 棋盘状态
-- 箭头对象模型
-- 可射出判定
-- 点击消除结算
-- 生命值 / 失败 / 通关
-- 星级计算
-- 提示与重开
-- 关卡数据读取
-- 埋点事件生成
-
-这一层应尽量做到：
-
-- 不依赖 DOM
-- 不依赖平台 API
-- 不依赖 Android/iOS UI
-- 可单测
-- 可复用到 Web / Android / iOS 工具链
-
-### 第二层：游戏渲染层（Canvas）
-
-职责：
-
-- 棋盘渲染
-- 棋子渲染
-- 点击命中检测
-- 消除动画
-- 错误点击红色反馈
-- 可点击态高亮
-- 连锁解锁提示
-- 小型特效与节奏反馈
-
-建议后续采用：
-
-- 原生 `Canvas 2D` 起步
-- 若动画与管理复杂度上升，再评估 `PixiJS`
-
-当前建议顺序：
-
-1. 先用原生 `Canvas 2D`
-2. 当出现明显的对象管理、动画编排、资源管理复杂度时，再考虑升到 `PixiJS`
-
-### 第三层：平台壳层（Android / iOS）
-
-职责：
-
-- App 生命周期
-- 页面导航
-- 广告 SDK
-- 内购 / 去广告
-- 存档
-- 音频 / 震动 / 触感
-- GA / GA4
-- Crash / 版本管理 / 上架适配
-
-这层不应该承载核心游戏规则。
-
-这层应该尽量只做：
-
-- UI 容器
-- 平台能力适配
-- 共享规则核的数据桥接
-
----
-
-## 4. 对 Android / iOS 的具体理解
-
-## 4.1 不是“分别写两套游戏”
-
-当前正确目标不是：
-
-- Android 写一套完整玩法
-- iOS 再重写一套完整玩法
-
-那样成本太高，也会让关卡与规则分叉。
-
-正确目标是：
-
-- 一套共享规则核
-- 一套共享关卡 JSON
-- 一套共享埋点事件模型
-- 平台各自只做壳和适配
-
----
-
-## 4.2 当前最现实的推进方式
-
-### 路线 A：WebView/嵌入式 Canvas 路线
-
-做法：
-
-- 用 `TypeScript + Canvas` 做游戏核心前端
-- Android/iOS 用原生壳包住游戏视图
-- 原生层负责广告、内购、埋点、存档、音频等
-
-优点：
-
-- 开发最快
-- 游戏逻辑最统一
-- Android / iOS 同步成本最低
-- 适合当前 MVP 快速试错
-
-缺点：
-
-- 与纯原生体验相比，可调优空间略小
-- 后期若要做很复杂原生能力整合，需要额外桥接设计
-
-### 路线 B：TS 规则核 + 原生 Canvas / 原生 UI 重绘路线
-
-做法：
-
-- `TypeScript` 只保留规则核、关卡和数据协议
-- Android / iOS 分别自己实现表现层
-
-优点：
-
-- 原生体验更强
-- 平台控制力更高
-
-缺点：
-
-- 前期开发明显更慢
-- 两端表现层维护成本更高
-- MVP 阶段不划算
-
-### 当前推荐
-
-**先走路线 A。**
-
-也就是：
-
-**先把游戏当成一个 `TS + Canvas` 核心产品来做，再由 Android / iOS 原生壳承接发布能力。**
-
----
-
-## 5. 当前目录建议
-
-建议仓库逐步演化为：
-
-```text
-game-arrow-again/
-  docs/
-  src/
-    core/
-    canvas/
-    levels/
-    ui/
-    analytics/
-  android/
-  ios/
+## 2. 技术栈与架构
+
+### 2.1 技术选型
+
+| 层 | 技术 | 说明 |
+|----|------|------|
+| 规则核心 | TypeScript（严格模式） | 纯函数、不可变状态、不依赖 DOM |
+| 渲染层 | Canvas 2D（原生） | 不用 PixiJS，MVP 阶段 Canvas 足够 |
+| 构建工具 | Vite 5.4 | 零配置，HMR 极快 |
+| 平台壳 | Android (Kotlin/Compose) / iOS (SwiftUI) | 占位目录，尚未集成 |
+
+**零运行时依赖**——`package.json` 中只有 `typescript` 和 `vite` 两个 devDependency。
+
+### 2.2 三层架构
+
+```
+┌─────────────────────────────────────────────┐
+│  平台壳层 (android/ · ios/)                  │
+│  App 生命周期 · 广告 · 内购 · 存档 · 音频     │
+├─────────────────────────────────────────────┤
+│  渲染层 (src/prototype/app.ts)               │
+│  Canvas 绘制 · 动画 · 粒子 · 输入检测 · HUD  │
+├─────────────────────────────────────────────┤
+│  规则核心 (src/core/)                        │
+│  棋盘状态 · 射出判定 · 消除结算 · 关卡数据    │
+└─────────────────────────────────────────────┘
 ```
 
-说明：
-
-- `src/core/`：规则核
-- `src/canvas/`：Canvas 渲染、动画、命中检测
-- `src/levels/`：关卡 JSON、关卡加载、难度配置
-- `src/ui/`：HUD、按钮、弹层、结果页
-- `src/analytics/`：事件定义与上报协议
-- `android/`：Android 壳
-- `ios/`：iOS 壳
+**设计原则**：规则核心不依赖任何平台 API，可被 Web / Android / iOS 共用。
 
 ---
 
-## 6. 当前模块拆分建议
+## 3. 目录结构
 
-## 6.1 规则层模块
-
-建议最少拆成：
-
-- `BoardState`
-- `ArrowPiece`
-- `ShootabilityChecker`
-- `ShotResolver`
-- `MistakePenaltySystem`
-- `StarScoreSystem`
-- `LevelLoader`
-- `HintSystem`
-- `GameSession`
-
-## 6.2 Canvas 层模块
-
-建议拆成：
-
-- `CanvasGameRenderer`
-- `BoardRenderer`
-- `ArrowRenderer`
-- `EffectRenderer`
-- `InputController`
-- `AnimationTimeline`
-- `ViewportScaler`
-
-## 6.3 平台层模块
-
-建议拆成：
-
-- `AdsAdapter`
-- `PurchaseAdapter`
-- `StorageAdapter`
-- `AudioAdapter`
-- `AnalyticsAdapter`
-- `HapticsAdapter`
+```
+game-arrow-again/
+├── index.html                 # HTML 入口
+├── package.json               # 项目配置（Vite + TypeScript）
+├── tsconfig.json              # TypeScript 编译配置（strict: true）
+│
+├── src/
+│   ├── main.ts                # Web 入口：加载样式，挂载 createPrototypeApp()
+│   ├── styles.css             # 全局样式（浅绿色主题）
+│   │
+│   ├── core/                  # ★ 规则核心（纯逻辑，零 DOM 依赖）
+│   │   ├── types.ts           #   类型定义
+│   │   ├── game.ts            #   游戏状态机 + 射出判定
+│   │   └── level.ts           #   5 个关卡数据
+│   │
+│   └── prototype/             # ★ Canvas 渲染层
+│       ├── app.ts             #   游戏渲染、动画、粒子、交互（~730 行）
+│       └── prototype.css      #   游戏 UI 样式
+│
+├── docs/                      # 设计文档
+├── android/                   # Android 壳（占位）
+└── ios/                       # iOS 壳（占位）
+```
 
 ---
 
-## 7. 为什么不是“只用 TS”，而要明确写 `TS + Canvas`
+## 4. 核心数据结构（src/core/types.ts）
 
-如果只说“TS 开发”，容易理解偏掉：
+```typescript
+// 四个方向
+type Direction = 'up' | 'right' | 'down' | 'left';
 
-- 变成普通 DOM 小游戏
-- 动画和渲染逻辑散在页面组件里
-- 后续迁移到移动端时重构成本高
+// 网格坐标
+interface Cell { row: number; col: number; }
 
-而当前项目从一开始就应该把它当成：
+// 箭头棋子配置（关卡定义用）
+interface ArrowPieceConfig {
+  id: string;          // 唯一标识，如 'a', 'b'
+  row: number;         // 行坐标（从 0 开始）
+  col: number;         // 列坐标（从 0 开始）
+  direction: Direction; // 箭头指向
+  color: string;       // 颜色（CSS hex，如 '#22c55e'）
+}
 
-- 有独立规则核
-- 有独立渲染层
-- 有独立平台壳
+// 运行时棋子状态（多一个 removed 标志）
+interface ArrowPieceState extends ArrowPieceConfig {
+  removed: boolean;
+}
 
-的小游戏产品。
+// 关卡配置
+interface LevelConfig {
+  id: string;          // 关卡 ID
+  rows: number;        // 棋盘行数
+  cols: number;        // 棋盘列数
+  lives: number;       // 初始生命值（错误点击扣减）
+  pieces: ArrowPieceConfig[];
+}
 
-所以技术口径必须明确成：
+// 射出结果
+interface ShotResult {
+  ok: boolean;                  // true=成功飞出, false=被阻挡
+  removedPieceId?: string;      // 成功时：被消除的棋子 ID
+  blockedByPieceId?: string;    // 失败时：阻挡者的 ID
+  escapedCells: Cell[];         // 射出路径经过的格子
+}
 
-**不是单纯 `TS`，而是 `TypeScript + Canvas`。**
-
----
-
-## 8. 是否需要 PixiJS
-
-当前判断：
-
-- **MVP 第一阶段：先不用**
-- **如果后续动画、对象数、资源管理明显变复杂，再评估接入**
-
-当前不急着上 `PixiJS` 的原因：
-
-- 棋盘对象数量不大
-- 首版重点是规则、关卡、反馈
-- 原生 Canvas 更轻、更直接
-
-触发升级到 `PixiJS` 的条件可以设成：
-
-1. 同屏对象和动画管理明显复杂
-2. 资源加载、层级管理、特效调度开始重复造轮子
-3. 需要更稳定的渲染对象体系
-
----
-
-## 9. 开发顺序建议
-
-### 第一阶段：玩法核验证
-
-- 完善 TS 规则核
-- 用 Canvas 重写当前 prototype
-- 跑通 5~10 个引导关
-- 加生命值、重开、过关结果
-
-### 第二阶段：内容与节奏验证
-
-- 建关卡 JSON 规范
-- 建难度递进规则
-- 加提示、失败反馈、连锁节奏
-- 加简单广告触发点模拟
-
-### 第三阶段：移动端承载
-
-- 起 Android 壳
-- 起 iOS 壳
-- 接存档、埋点、音频、广告、内购
-- 形成第一版可发布包体
+// 完整游戏状态（不可变，每次操作返回新对象）
+interface GameState {
+  level: LevelConfig;
+  pieces: ArrowPieceState[];
+  moveCount: number;            // 累计点击次数
+  remainingLives: number;       // 剩余生命
+  completed: boolean;           // 所有棋子已清除
+  failed: boolean;              // 生命耗尽
+  lastShot: ShotResult | null;  // 上次射出结果
+}
+```
 
 ---
 
-## 10. 最终推荐
+## 5. 核心游戏逻辑（src/core/game.ts）
 
-当前正式推荐路线如下：
+### 5.1 状态管理
 
-- **核心玩法与关卡：`TypeScript`**
-- **游戏渲染与交互：`Canvas 2D`**
-- **移动端发布：Android / iOS 原生壳承载**
-- **首版不引入 Unity**
-- **首版先不强依赖 PixiJS，必要时再升级**
+采用**纯函数 + 不可变状态**模式，每次操作返回全新 `GameState`，不修改原对象。
 
-一句话收口：
+```
+createInitialState(level) → GameState     // 从关卡配置初始化
+shootPiece(state, pieceId) → GameState    // 执行一次点击，返回新状态
+```
 
-**`game-arrow-again` 当前最合适的首版技术路线，就是 `TypeScript + Canvas` 做游戏核心，再由 Android / iOS 原生壳接入发布能力。**
+### 5.2 核心函数一览
+
+| 函数 | 输入 | 输出 | 说明 |
+|------|------|------|------|
+| `createInitialState(level)` | `LevelConfig` | `GameState` | 初始化游戏 |
+| `getPieceById(state, id)` | `GameState, string` | `ArrowPieceState \| undefined` | 按 ID 查找棋子 |
+| `getActivePieces(state)` | `GameState` | `ArrowPieceState[]` | 获取未消除的棋子 |
+| `getShotPath(state, id)` | `GameState, string` | `ShotResult` | 计算射出路径和结果 |
+| `getShootablePieceIds(state)` | `GameState` | `string[]` | 获取当前可射出的棋子 ID 列表 |
+| `shootPiece(state, id)` | `GameState, string` | `GameState` | 执行射出操作 |
+
+### 5.3 射出判定算法（getShotPath）
+
+```
+输入：GameState + 目标棋子 ID
+输出：ShotResult
+
+1. 获取棋子的方向向量 (row_delta, col_delta)
+2. 从棋子位置沿方向逐格前进
+3. 每到一格：
+   a. 检查是否还在棋盘范围内
+   b. 检查该格是否有其他未消除的棋子
+4. 如果到达边界且未被阻挡 → ok: true，记录 removedPieceId
+5. 如果碰到其他棋子 → ok: false，记录 blockedByPieceId
+```
+
+方向向量映射：
+
+| Direction | row delta | col delta |
+|-----------|-----------|-----------|
+| up | -1 | 0 |
+| down | +1 | 0 |
+| left | 0 | -1 |
+| right | 0 | +1 |
+
+### 5.4 胜负判定
+
+- **过关**：`pieces.every(p => p.removed)` → `completed = true`
+- **失败**：`remainingLives === 0` → `failed = true`
+- **评分**：剩余生命 ≥ 2 → 3 星，≥ 1 → 2 星，= 0 → 1 星
+
+### 5.5 示例：推理链
+
+```
+棋盘状态：
+  A(→) 在 (2,1)
+  B(→) 在 (2,3)
+
+A 向右射出 → 路径经过 (2,2) 到 (2,3) 碰到 B → 被阻挡
+B 向右射出 → 路径经过 (2,4) 到边界 → 成功飞出
+
+正确顺序：先射 B，再射 A
+```
+
+---
+
+## 6. 关卡数据格式（src/core/level.ts）
+
+关卡以 `LevelConfig` 数组形式硬编码。每个关卡定义棋盘尺寸、生命值和棋子列表。
+
+### 当前 5 个关卡
+
+| 关卡 | 棋盘 | 棋子数 | 生命 | 难度要素 |
+|------|------|--------|------|---------|
+| 1 | 5×5 | 3 | 3 | 全部自由箭头，无阻挡（教学） |
+| 2 | 5×5 | 4 | 3 | 简单阻挡（a 被 b 挡，需先射 b） |
+| 3 | 6×6 | 5 | 2 | 链式依赖 A→B→C |
+| 4 | 7×7 | 8 | 3 | 横纵交叉阻挡 |
+| 5 | 8×8 | 12 | 3 | 高密度，多条依赖链并行 |
+
+### 关卡 JSON 示例
+
+```typescript
+{
+  id: 'level-1',
+  rows: 5,
+  cols: 5,
+  lives: 3,
+  pieces: [
+    { id: 'a', row: 2, col: 1, direction: 'left',  color: '#22c55e' },
+    { id: 'b', row: 1, col: 3, direction: 'up',    color: '#f59e0b' },
+    { id: 'c', row: 3, col: 3, direction: 'down',  color: '#38bdf8' },
+  ],
+}
+```
+
+### 如何新增关卡
+
+1. 在 `tutorialLevels` 数组末尾添加新的 `LevelConfig` 对象
+2. 指定 `rows`/`cols`（棋盘大小）、`lives`（生命值）
+3. 添加 `pieces` 数组，每个棋子需要唯一 `id`、位置 `(row, col)`、方向和颜色
+4. UI 会自动生成对应的 Level 按钮
+
+---
+
+## 7. 渲染系统（src/prototype/app.ts）
+
+### 7.1 渲染架构
+
+```
+requestAnimationFrame 循环
+  │
+  ├── updateParticles(dt)          // 更新粒子位置和生命周期
+  ├── updateScreenShake()          // 更新屏幕震动
+  │
+  ├── drawBoard()                  // 清屏 + 绘制棋盘背景和网格
+  │
+  ├── for each activePiece:        // 绘制每个未消除的棋子
+  │   └── drawPiece()              //   渐变填充 + 几何箭头 + 高光 + 发光
+  │
+  ├── drawErrorOverlay()           // 错误点击：红色闪烁 + 阻挡者高亮
+  ├── drawUnlockPulse()            // 解锁脉冲：金色扩展环
+  ├── drawShotAnim()               // 射出动画：残影 + 粒子 + 出界闪光
+  │
+  └── drawParticles()              // 绘制所有活跃粒子
+```
+
+### 7.2 常量配置
+
+| 常量 | 值 | 说明 |
+|------|----|------|
+| `CELL_SIZE` | 64px | 每个网格单元的像素尺寸 |
+| `BOARD_PADDING` | 16px | 棋盘内边距 |
+| `SHOT_DURATION_MS` | 420ms | 射出动画总时长 |
+| `ERROR_SHAKE_MS` | 320ms | 错误摇晃时长 |
+| `ERROR_FLASH_MS` | 280ms | 错误红色闪烁时长 |
+| `UNLOCK_PULSE_MS` | 500ms | 解锁脉冲时长 |
+| `PIECE_RADIUS` | 12px | 棋子圆角半径 |
+| `ARROW_SCALE` | 0.36 | 箭头图形占棋子面积的比例 |
+
+### 7.3 棋子渲染（drawPiece）
+
+每个箭头棋子的绘制分为 6 层：
+
+```
+┌─────────────────────────┐
+│ 6. 发光环（仅可射出状态） │  ← 呼吸脉冲动画
+├─────────────────────────┤
+│ 5. 几何箭头（白色）      │  ← 三角形头部 + 矩形尾部，按方向旋转
+├─────────────────────────┤
+│ 4. 顶部高光              │  ← 半透明白色，模拟光泽
+├─────────────────────────┤
+│ 3. 边框                  │  ← 比填充色深 25% 的描边
+├─────────────────────────┤
+│ 2. 渐变填充              │  ← 顶部亮 → 中间原色 → 底部暗
+├─────────────────────────┤
+│ 1. 阴影层                │  ← 8px 模糊，3px 偏移，黑色 15% 透明度
+└─────────────────────────┘
+```
+
+**状态视觉反馈**：
+
+| 状态 | 视觉表现 |
+|------|---------|
+| 可射出 | 呼吸发光环（1.5s 周期）+ 微弱缩放脉冲（±2.5%） |
+| 鼠标悬停（可射出）| 放大至 108%，指针光标 |
+| 鼠标悬停（不可射出）| 禁止光标 |
+| 错误点击 | 水平摇晃（±4px，3 次振荡）+ 红色闪烁叠加 |
+| 被阻挡者 | 红色发光描边 |
+| 新解锁 | 金色扩展脉冲环（easeOutBack 弹性） |
+
+### 7.4 箭头形状绘制（drawArrowShape）
+
+几何箭头由 Canvas Path 绘制，而非文字字符：
+
+```
+方向：→（右）的坐标（未旋转时）
+
+     headLen
+    ├───────┤
+    ·───────▶  ← headW (半高)
+    │       │
+    ╞═══════╡  ← tailW (半高)
+    tailLen
+```
+
+通过 `ctx.rotate(angle)` 旋转实现四个方向：
+- up: -90°
+- right: 0°
+- down: 90°
+- left: 180°
+
+### 7.5 动画系统
+
+#### 射出动画（420ms）
+
+```
+时间轴:
+0ms ──────── 350ms ──── 390ms ── 420ms
+│  残影轨迹    │  主体飞出  │ 出界爆发 │
+
+阶段 1（0-85% 进度）：5 个残影跟随主体，每个比前一个更小更透明
+阶段 2（全程）：主体棋子沿方向加速飞出（easeInQuad）
+阶段 3（>80%）：随机生成飞行粒子
+阶段 4（>92%）：出界粒子爆发（14 颗）+ 屏幕震动（±3px，60ms）
+```
+
+#### 粒子系统
+
+```typescript
+interface Particle {
+  x, y: number;       // 位置
+  vx, vy: number;     // 速度（每帧衰减 ×0.96）
+  life: number;        // 0→死亡, 1→满生命
+  maxLife: number;     // 粒子寿命（0.4-0.7 秒）
+  color: string;       // 颜色
+  size: number;        // 半径（2-5px）
+}
+```
+
+- 每帧更新位置和生命值
+- 绘制为带发光（shadowBlur）的圆形
+- 死亡后从数组移除
+- 最大同时存在约 30 个粒子
+
+#### 错误反馈动画
+
+- **摇晃公式**：`offset = sin(t × π × 6) × 4 × (1 - t)`
+  - 6 次半周期振荡，振幅从 4px 线性衰减至 0
+- **红色闪烁**：覆盖一层 50% 透明度的红色圆角矩形，280ms 内淡出
+- **阻挡者高亮**：红色发光描边，同步淡出
+
+#### 链式解锁脉冲
+
+当消除一个棋子后，如果新的棋子变为可射出：
+- 在新解锁的棋子上绘制金色扩展环
+- 使用 `easeOutBack` 缓动产生弹性超调效果
+- 500ms 内完成并淡出
+
+### 7.6 颜色工具函数
+
+| 函数 | 用途 | 示例 |
+|------|------|------|
+| `hexToRgb(hex)` | 解析 hex 为 [r,g,b] | `'#22c55e' → [34,197,94]` |
+| `lighten(hex, amount)` | 向白色混合 | `lighten('#22c55e', 0.22)` → 变亮 22% |
+| `darken(hex, amount)` | 向黑色混合 | `darken('#22c55e', 0.15)` → 变暗 15% |
+| `withAlpha(hex, alpha)` | 添加透明度 | `withAlpha('#22c55e', 0.6)` → `rgba(34,197,94,0.6)` |
+
+### 7.7 缓动函数
+
+| 函数 | 公式 | 用途 |
+|------|------|------|
+| `easeOutQuad(t)` | `t(2-t)` | 飞出淡出 |
+| `easeInQuad(t)` | `t²` | 飞出加速 |
+| `easeOutBack(t)` | 含超调的弹性缓出 | 解锁脉冲 |
+
+---
+
+## 8. 交互模型
+
+### 8.1 输入处理
+
+```
+Canvas 事件监听：
+
+mousemove → 碰撞检测(pieceBounds) → 更新 hoveredPieceId → 更新光标样式
+mouseleave → 清除 hoveredPieceId
+click → 碰撞检测 → getPieceById → shootPiece →
+  ├── 成功：启动射出动画，设置 pendingNextState
+  └── 失败：设置错误动画，立即更新状态
+```
+
+### 8.2 碰撞检测
+
+每帧渲染后记录所有棋子的屏幕坐标到 `pieceBounds: PieceBounds[]`：
+
+```typescript
+interface PieceBounds {
+  pieceId: string;
+  x: number;    // 像素坐标
+  y: number;
+  size: number; // 棋子边长（CELL_SIZE - 6）
+}
+```
+
+点击/悬停时遍历 `pieceBounds` 做矩形碰撞检测。
+
+### 8.3 动画期间的状态管理
+
+射出动画期间需要延迟状态更新，避免棋子闪烁：
+
+```
+点击棋子 A（成功射出）：
+  1. 记录 preShootableIds（当前可射出集合，排除 A）
+  2. 立即更新 state.pieces（A 标记 removed）
+  3. 保存完整的 nextState 到 pendingNextState
+  4. 启动 shotAnim
+  
+动画播放中：
+  - 渲染循环跳过已 removed 的 A
+  - shotAnim 独立绘制飞行中的 A
+
+动画结束（finishShot）：
+  5. state = pendingNextState（含 completed/failed 判定）
+  6. 对比 preShootableIds 和新的 shootableIds
+  7. 差集即为"新解锁"的棋子，触发 unlockAnim
+  8. 更新 HUD
+```
+
+---
+
+## 9. UI 层
+
+### 9.1 DOM 结构
+
+```
+main.shell
+├── h1                    "Arrow Again"
+├── p                     游戏说明文字
+├── div.controls          Level 1-5 按钮 + Restart 按钮
+├── div.hud               ❤️❤️❤️ Taps: 0
+├── div.status            "Level 1"
+├── div.hint              "3 arrows can be shot"
+└── div.board-wrap
+    └── canvas.board-canvas
+```
+
+### 9.2 视觉主题
+
+| 元素 | 颜色 |
+|------|------|
+| 页面背景 | #E8F5F0（浅薄荷绿） |
+| 棋盘背景 | #f0f9f4（极浅绿） |
+| 棋盘容器 | 白色，圆角 20px，阴影 |
+| 文字主色 | #1a3c34（深绿灰） |
+| 按钮 | #2d8a6e（绿色，hover 变深） |
+| 网格线 | rgba(45,90,74,0.05)（极淡） |
+| 网格点 | rgba(45,90,74,0.08) |
+
+### 9.3 HUD 显示
+
+- **生命值**：❤️ 表示剩余，🖤 表示已失去
+- **点击次数**：`Taps: N`
+- **过关评语**：3 星 = "Perfect!"，2 星 = "Great job!"
+- **过关评分**：剩余生命 ≥ 2 → ⭐⭐⭐，≥ 1 → ⭐⭐，0 → ⭐
+
+---
+
+## 10. 开发命令
+
+```bash
+# 进入项目目录
+cd ~/.openclaw/workspace/projects/game-arrow-again
+
+# 安装依赖
+npm install
+
+# 启动开发服务器（HMR）
+npm run dev
+# → http://localhost:5173/
+
+# TypeScript 类型检查
+npx tsc --noEmit
+
+# 生产构建
+npm run build
+# → dist/
+
+# 预览生产构建
+npm run preview
+```
+
+---
+
+## 11. 扩展指南
+
+### 11.1 添加新的棋子类型
+
+1. 在 `types.ts` 中扩展 `ArrowPieceConfig`（如添加 `weight`、`special` 等字段）
+2. 在 `game.ts` 的 `getShotPath` 中处理新类型的阻挡/射出逻辑
+3. 在 `app.ts` 的 `drawPiece` 中添加新类型的渲染样式
+
+### 11.2 添加新的动画效果
+
+1. 定义新的动画状态接口（参考 `ShotAnim`、`ErrorAnim`）
+2. 在 `render()` 函数中添加绘制逻辑
+3. 在对应的事件触发点设置动画起始时间
+
+### 11.3 接入移动端
+
+当前推荐路线（路线 A）：
+1. 将 `src/core/` 打包为独立模块
+2. Android/iOS 通过 WebView 加载 Canvas 游戏
+3. 原生层通过 JS Bridge 提供：广告、内购、存档、音频、震动
+
+### 11.4 模块拆分建议
+
+当 `app.ts` 超过 1000 行时，建议拆分为：
+
+```
+src/canvas/
+├── renderer.ts        # drawBoard, drawPiece, drawArrowShape
+├── animator.ts        # 动画状态管理、射出/错误/解锁动画
+├── particles.ts       # 粒子系统
+├── input.ts           # 鼠标/触摸事件处理
+├── hud.ts             # DOM HUD 管理
+└── colors.ts          # 颜色工具函数
+```
+
+---
+
+## 12. 当前状态与后续计划
+
+### 已完成
+
+- [x] TypeScript 规则核心（纯函数、不可变状态）
+- [x] Canvas 2D 渲染层（渐变棋子、几何箭头、发光动画）
+- [x] 5 个渐进难度关卡
+- [x] 射出动画（残影 + 粒子 + 出界闪光 + 屏幕震动）
+- [x] 错误反馈（摇晃 + 红闪 + 阻挡者高亮）
+- [x] 链式解锁脉冲
+- [x] 悬停交互反馈
+- [x] 生命值 / 评分 / 过关判定
+- [x] 关卡切换 UI
+- [x] 浅绿色主题（对标产品方案 PDF）
+
+### 未完成
+
+- [ ] 关卡进度持久化（localStorage / 云存档）
+- [ ] 关卡选择界面（替代当前的按钮列表）
+- [ ] 提示系统（高亮建议射出的棋子）
+- [ ] 死局检测（所有棋子互相阻挡时提示重开）
+- [ ] 音效 / 触觉反馈
+- [ ] 更多关卡（目标 10 关 MVP）
+- [ ] 分析埋点（事件定义与上报）
+- [ ] Android / iOS 原生壳集成
+- [ ] 每日挑战模式
