@@ -5,7 +5,7 @@
 - 项目名：`game-arrow-again`
 - 当前阶段：开发推进中
 - 当前默认平台：独立 app（Android / iOS）
-- 当前默认路线：非 Unity 优先
+- 当前默认路线：`TypeScript + Canvas` 优先，非 Unity 优先
 - 当前代码目录：`/Users/zhengjinyang/.openclaw/workspace/projects/game-arrow-again/`
 
 ## 已有基础资料
@@ -23,7 +23,8 @@
 - 已实现共享规则核第一版：箭头方向、路径阻挡、点击消除、错误点击扣命
 - 已实现 3 个引导关 demo
 - 已补 Android / iOS 双端启动架构文档：`docs/mobile-architecture.md`
-- 下一步应补原生壳、关卡流转、星级和埋点模型
+- 已补正式技术路线文档：`docs/technical-architecture.md`
+- 下一步应补 Canvas 渲染层、原生壳、关卡流转、星级和埋点模型
 
 ## 外部输入分析更新
 
@@ -66,7 +67,7 @@
 ### 下一步标准动作
 
 1. 继续增强共享规则核
-2. 补 Android / iOS 原生壳与页面流
-3. 加生命值 / 星级 / 重开 / 关卡流转
-4. 以 3~5 个引导关验证核心体验
+2. 把当前原型渲染层收口到 `Canvas`
+3. 补 Android / iOS 原生壳与页面流
+4. 加生命值 / 星级 / 重开 / 关卡流转
 5. 细化 `GA / GA4` 数据分析方案与难度递增设计，并同步回 Obsidian 详细文档

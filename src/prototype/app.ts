@@ -1,8 +1,9 @@
-import { createInitialState, getActivePieces, getShotPath, getShootablePieceIds, shootPiece } from '../core/game';
-import { tutorialLevels } from '../core/level';
+import { createInitialState, getActivePieces, getShootablePieceIds, shootPiece } from '../core/game';
+import { demoLevel } from '../core/level';
 import type { ArrowPieceState, Direction, GameState } from '../core/types';
 
-const CELL_SIZE = 68;
+const CELL_SIZE = 80;
+const BOARD_PADDING = 20;
 const DIRECTION_GLYPH: Record<Direction, string> = {
   up: '↑',
   right: '→',
@@ -10,69 +11,99 @@ const DIRECTION_GLYPH: Record<Direction, string> = {
   left: '←'
 };
 
-function renderPiece(piece: ArrowPieceState, shootable: boolean, disabled: boolean): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.className = `piece ${shootable ? 'piece--shootable' : ''}`;
-  button.style.gridColumn = String(piece.col + 1);
-  button.style.gridRow = String(piece.row + 1);
-  button.style.background = piece.color;
-  button.textContent = DIRECTION_GLYPH[piece.direction];
-  button.dataset.pieceId = piece.id;
-  button.disabled = disabled;
-  return button;
+type PieceBounds = {
+  pieceId: string;
+  x: number;
+  y: number;
+  size: number;
+};
+
+function drawRoundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+): void {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.lineTo(x + width - radius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + radius);
+  context.lineTo(x + width, y + height - radius);
+  context.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  context.lineTo(x + radius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - radius);
+  context.lineTo(x, y + radius);
+  context.quadraticCurveTo(x, y, x + radius, y);
+  context.closePath();
 }
 
-function renderBoard(
-  state: GameState,
-  board: HTMLDivElement,
-  status: HTMLDivElement,
-  hint: HTMLDivElement,
-  onPieceClick: (event: MouseEvent) => void
-): void {
-  board.innerHTML = '';
-  board.style.gridTemplateColumns = `repeat(${state.level.cols}, ${CELL_SIZE}px)`;
-  board.style.gridTemplateRows = `repeat(${state.level.rows}, ${CELL_SIZE}px)`;
+function renderCanvasBoard(
+  context: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  state: GameState
+): PieceBounds[] {
+  const boardWidth = state.level.cols * CELL_SIZE + BOARD_PADDING * 2;
+  const boardHeight = state.level.rows * CELL_SIZE + BOARD_PADDING * 2;
+  canvas.width = boardWidth * window.devicePixelRatio;
+  canvas.height = boardHeight * window.devicePixelRatio;
+  canvas.style.width = `${boardWidth}px`;
+  canvas.style.height = `${boardHeight}px`;
+  context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+  context.clearRect(0, 0, boardWidth, boardHeight);
+
+  drawRoundedRect(context, 0, 0, boardWidth, boardHeight, 28);
+  context.fillStyle = 'rgba(15, 23, 42, 0.92)';
+  context.fill();
 
   for (let row = 0; row < state.level.rows; row += 1) {
     for (let col = 0; col < state.level.cols; col += 1) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      board.appendChild(cell);
+      const x = BOARD_PADDING + col * CELL_SIZE;
+      const y = BOARD_PADDING + row * CELL_SIZE;
+      drawRoundedRect(context, x, y, CELL_SIZE - 8, CELL_SIZE - 8, 20);
+      context.fillStyle = 'rgba(148, 163, 184, 0.14)';
+      context.fill();
+      context.strokeStyle = 'rgba(148, 163, 184, 0.1)';
+      context.lineWidth = 1;
+      context.stroke();
     }
   }
 
   const shootableIds = new Set(getShootablePieceIds(state));
+  const bounds: PieceBounds[] = [];
+
   getActivePieces(state).forEach((piece) => {
-    const button = renderPiece(piece, shootableIds.has(piece.id), state.completed || state.failed);
-    button.addEventListener('click', onPieceClick);
-    board.appendChild(button);
+    const x = BOARD_PADDING + piece.col * CELL_SIZE;
+    const y = BOARD_PADDING + piece.row * CELL_SIZE;
+    const size = CELL_SIZE - 8;
+
+    context.save();
+    drawRoundedRect(context, x, y, size, size, 20);
+    context.fillStyle = piece.color;
+    context.shadowColor = 'rgba(15, 23, 42, 0.32)';
+    context.shadowBlur = 24;
+    context.shadowOffsetY = 8;
+    context.fill();
+    context.restore();
+
+    if (shootableIds.has(piece.id)) {
+      drawRoundedRect(context, x + 2, y + 2, size - 4, size - 4, 18);
+      context.strokeStyle = 'rgba(255,255,255,0.88)';
+      context.lineWidth = 3;
+      context.stroke();
+    }
+
+    context.fillStyle = '#ffffff';
+    context.font = '700 34px Inter, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(DIRECTION_GLYPH[piece.direction], x + size / 2, y + size / 2 + 1);
+
+    bounds.push({ pieceId: piece.id, x, y, size });
   });
 
-  if (state.completed) {
-    status.textContent = `Level cleared in ${state.moveCount} taps`;
-    hint.textContent = '全部清空了。下一步接关卡流转、星级和动画。';
-    return;
-  }
-
-  if (state.failed) {
-    status.textContent = `Lives: 0 · ${state.moveCount} taps`;
-    hint.textContent = '生命值用完了。先重开，再找出路径完全畅通的箭头。';
-    return;
-  }
-
-  status.textContent = `Lives: ${state.remainingLives} · Taps: ${state.moveCount}`;
-
-  if (!state.lastShot) {
-    hint.textContent = `当前可直接飞出的箭头：${getShootablePieceIds(state).join(', ') || '无'}`;
-    return;
-  }
-
-  if (state.lastShot.ok) {
-    hint.textContent = `已消除 ${state.lastShot.removedPieceId}，继续找下一个路径无遮挡的箭头。`;
-    return;
-  }
-
-  hint.textContent = `点击失败：被 ${state.lastShot.blockedByPieceId ?? '未知棋子'} 挡住。`;
+  return bounds;
 }
 
 function createMobileShellPreview(): HTMLElement {
@@ -80,42 +111,39 @@ function createMobileShellPreview(): HTMLElement {
   wrapper.className = 'mobile-preview';
   wrapper.innerHTML = `
     <div class="phone-card">
-      <div class="phone-card__header">Android / iOS App Shell</div>
+      <div class="phone-card__header">Android Demo Target</div>
       <div class="phone-card__body">
-        <div class="phone-card__screen">Home</div>
-        <div class="phone-card__screen">Level Map</div>
-        <div class="phone-card__screen">Game</div>
-        <div class="phone-card__screen">Result</div>
+        <div class="phone-card__screen">Compose Shell</div>
+        <div class="phone-card__screen">Level 1 Demo</div>
+        <div class="phone-card__screen">Canvas Board</div>
+        <div class="phone-card__screen">Result HUD</div>
       </div>
-      <div class="phone-card__footer">共享规则核 + 平台壳分层</div>
+      <div class="phone-card__footer">当前先推进到安卓可运行 demo</div>
     </div>
   `;
   return wrapper;
 }
 
 export function createPrototypeApp(): HTMLElement {
-  let levelIndex = 0;
-  let state = createInitialState(tutorialLevels[levelIndex]);
+  let state = createInitialState(demoLevel);
+  let pieceBounds: PieceBounds[] = [];
 
   const shell = document.createElement('main');
   shell.className = 'shell';
 
   const title = document.createElement('h1');
-  title.textContent = 'Arrow Again MVP Prototype';
+  title.textContent = 'Arrow Again · Level 1 Canvas Demo';
 
   const intro = document.createElement('p');
-  intro.textContent = '已从旧 Parking Jam 拖拽原型收口到箭头点击消除规则核，并同步按 Android / iOS 双端启动。';
+  intro.textContent = '第一关 demo 已切到 Canvas 渲染：找出路径无遮挡的箭头，点击让它飞出，清空棋盘过关。';
 
   const controls = document.createElement('div');
   controls.className = 'controls';
 
   const reset = document.createElement('button');
-  reset.textContent = 'Replay';
+  reset.textContent = 'Replay Level 1';
 
-  const nextLevel = document.createElement('button');
-  nextLevel.textContent = 'Next Level';
-
-  controls.append(reset, nextLevel);
+  controls.append(reset);
 
   const status = document.createElement('div');
   status.className = 'status';
@@ -123,36 +151,68 @@ export function createPrototypeApp(): HTMLElement {
   const hint = document.createElement('div');
   hint.className = 'hint';
 
-  const board = document.createElement('div');
-  board.className = 'board';
+  const boardWrap = document.createElement('div');
+  boardWrap.className = 'board-wrap';
 
-  function repaint(): void {
-    renderBoard(state, board, status, hint, handlePieceClick);
+  const canvas = document.createElement('canvas');
+  canvas.className = 'board-canvas';
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    throw new Error('Canvas 2D context not available');
   }
 
-  function handlePieceClick(event: MouseEvent): void {
-    const target = event.currentTarget as HTMLButtonElement;
-    const pieceId = target.dataset.pieceId;
-    if (!pieceId) {
+  function repaint(): void {
+    pieceBounds = renderCanvasBoard(context, canvas, state);
+
+    if (state.completed) {
+      status.textContent = `Level 1 cleared in ${state.moveCount} taps`;
+      hint.textContent = '第一关已跑通。下一步继续补动画、星级和 Android 真机承载。';
       return;
     }
 
-    state = shootPiece(state, pieceId);
-    repaint();
+    if (state.failed) {
+      status.textContent = `Lives: 0 · ${state.moveCount} taps`;
+      hint.textContent = '生命值用完了，重开后优先点带白色描边的箭头。';
+      return;
+    }
+
+    status.textContent = `Level 1 · Lives: ${state.remainingLives} · Taps: ${state.moveCount}`;
+
+    if (!state.lastShot) {
+      hint.textContent = `当前可直接飞出的箭头：${getShootablePieceIds(state).join(', ') || '无'}`;
+      return;
+    }
+
+    if (state.lastShot.ok) {
+      hint.textContent = `已消除 ${state.lastShot.removedPieceId}，继续清空剩余箭头。`;
+      return;
+    }
+
+    hint.textContent = `点击失败：被 ${state.lastShot.blockedByPieceId ?? '未知棋子'} 挡住。`;
   }
 
+  canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    const hit = pieceBounds.find((item) => x >= item.x && x <= item.x + item.size && y >= item.y && y <= item.y + item.size);
+
+    if (!hit) {
+      return;
+    }
+
+    state = shootPiece(state, hit.pieceId);
+    repaint();
+  });
+
   reset.addEventListener('click', () => {
-    state = createInitialState(tutorialLevels[levelIndex]);
+    state = createInitialState(demoLevel);
     repaint();
   });
 
-  nextLevel.addEventListener('click', () => {
-    levelIndex = (levelIndex + 1) % tutorialLevels.length;
-    state = createInitialState(tutorialLevels[levelIndex]);
-    repaint();
-  });
-
-  shell.append(title, intro, controls, status, hint, board, createMobileShellPreview());
+  boardWrap.appendChild(canvas);
+  shell.append(title, intro, controls, status, hint, boardWrap, createMobileShellPreview());
   repaint();
   return shell;
 }

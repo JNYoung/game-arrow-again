@@ -4,3 +4,8 @@ dist/
 .vscode/
 .idea/
 *.log
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/gradle-*-bin.zip
